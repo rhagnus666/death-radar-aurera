@@ -33,6 +33,7 @@ class Connections:
 connections = Connections()
 
 async def polling_loop():
+    baseline = True
     while True:
         try:
             rows = await fetch_deaths()
@@ -46,12 +47,13 @@ async def polling_loop():
                                "killer": death.killer, "guild": death.guild,
                                "happened_at": death.happened_at.isoformat() if death.happened_at else None}
                     await connections.broadcast({"type": "death", "death": payload})
-                    if death.guild in ("ally", "enemy"):
+                    if not baseline and death.guild in ("ally", "enemy"):
                         label = settings.guild_ally if death.guild == "ally" else settings.guild_enemy
                         when = death.happened_at.strftime("%d/%m/%Y %H:%M") if death.happened_at else "horário não identificado"
                         msg = f"⚠️ Death Radar – Aurera Global\nGuild: {label}\nPersonagem: {death.victim}\nLevel: {death.level or 'não identificado'}\nMatadores: {death.killer or 'não identificado'}\nData: {when}"
                         try: await send_alert(msg)
                         except Exception as exc: print(f"Telegram alert failed: {exc}")
+            baseline = False
         except Exception as exc:
             print(f"Death polling failed: {exc}")
         await asyncio.sleep(settings.poll_interval_seconds)

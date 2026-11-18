@@ -25,31 +25,33 @@ def classify_guild(name: str, rosters=None) -> str:
     return "unknown"
 
 def parse_time(text: str):
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"):
+    for fmt in ("%d.%m.%Y, %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+                "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"):
         try: return datetime.strptime(text.strip(), fmt)
         except ValueError: pass
     return None
 
 def parse_deaths(html: str):
+    """Parse Aurera's numbered latest-deaths list, not unrelated page tables."""
     soup = BeautifulSoup(html, "html.parser")
-    results = []
-    for table in soup.find_all("table"):
-        for tr in table.find_all("tr"):
-            cells = tr.find_all(["td", "th"], recursive=False)
-            if len(cells) < 2: continue
-            raw = " ".join(tr.stripped_strings)
-            links = [a.get_text(" ", strip=True) for a in tr.find_all("a") if a.get_text(" ", strip=True)]
-            if not raw or not links: continue
-            victim = links[0].strip()
-            if len(victim) > 120 or not re.search(r"[A-Za-z]", victim): continue
-            level_match = re.search(r"\b(?:level\s*)?(\d{1,5})\b", raw, re.I)
-            level = int(level_match.group(1)) if level_match else None
-            date_match = re.search(r"\b(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}(?::\d{2})?|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?)\b", raw)
-            happened_at = parse_time(date_match.group(1)) if date_match else None
-            killer = ", ".join(links[1:]) if len(links) > 1 else None
-            key = hashlib.sha256(f"{raw}|{victim}".casefold().encode("utf-8")).hexdigest()
-            results.append({"source_key": key, "victim": victim, "level": level, "killer": killer,
-                            "happened_at": happened_at, "guild": classify_guild(victim), "raw_text": raw[:2000]})
+    results, seen = [], set()
+    date_re = re.compile(r"\b(\d{2}\.\d{2}\.\d{4},\s*\d{2}:\d{2}:\d{2})\b")
+    level_re = re.compile(r"\bno level\s+(\d{1,5})\b", re.I)
+    for item in soup.find_all(["li", "tr"]):
+        raw = " ".join(item.stripped_strings)
+        date_match, level_match = date_re.search(raw), level_re.search(raw)
+        if not date_match or not level_match: continue
+        links = [a.get_text(" ", strip=True) for a in item.find_all("a") if a.get_text(" ", strip=True)]
+        if not links: continue
+        victim = links[0].strip()
+        if len(victim) > 120: continue
+        key = hashlib.sha256(raw.casefold().encode("utf-8")).hexdigest()
+        if key in seen: continue
+        seen.add(key)
+        results.append({"source_key": key, "victim": victim, "level": int(level_match.group(1)),
+                        "killer": ", ".join(links[1:]) or None,
+                        "happened_at": parse_time(date_match.group(1)),
+                        "guild": classify_guild(victim), "raw_text": raw[:2000]})
     return results
 
 async def fetch_deaths():

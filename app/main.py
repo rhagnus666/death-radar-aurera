@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, Form, WebSocket, WebSocketDisconnect
@@ -57,6 +58,10 @@ async def polling_loop():
 
 @asynccontextmanager
 async def lifespan(app):
+    if not settings.admin_password:
+        raise RuntimeError("Configure ADMIN_PASSWORD before starting the service.")
+    if not settings.secret_key:
+        raise RuntimeError("Configure SECRET_KEY before starting the service.")
     Base.metadata.create_all(bind=engine)
     task = asyncio.create_task(polling_loop())
     yield
@@ -65,7 +70,7 @@ async def lifespan(app):
     except asyncio.CancelledError: pass
 
 app = FastAPI(title="Death Radar – Aurera Global", lifespan=lifespan)
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key or "local-development-key-change-me", https_only=False, same_site="lax")
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key or "local-development-key-change-me", https_only=bool(os.getenv("RENDER_EXTERNAL_URL")), same_site="lax")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/health")

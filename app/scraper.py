@@ -17,11 +17,17 @@ def load_rosters():
     except (OSError, ValueError, TypeError):
         return {"ally": set(), "enemy": set()}
 
+def normalize_name(name: str) -> str:
+    # Roster notes in parentheses are annotations, not part of the in-game name.
+    return re.sub(r"\s*\([^)]*\)\s*$", "", name).strip().casefold()
+
 def classify_guild(name: str, rosters=None) -> str:
     rosters = rosters or load_rosters()
-    key = name.strip().casefold()
-    if key in rosters["enemy"]: return "enemy"
-    if key in rosters["ally"]: return "ally"
+    key = normalize_name(name)
+    enemy = {normalize_name(x) for x in rosters["enemy"]}
+    ally = {normalize_name(x) for x in rosters["ally"]}
+    if key in enemy: return "enemy"
+    if key in ally: return "ally"
     return "unknown"
 
 def parse_time(text: str):

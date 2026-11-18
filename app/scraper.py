@@ -43,10 +43,11 @@ def parse_deaths(html: str):
     results, seen = [], set()
     date_re = re.compile(r"\b(\d{2}\.\d{2}\.\d{4},\s*\d{2}:\d{2}:\d{2})\b")
     level_re = re.compile(r"\bno level\s+(\d{1,5})\b", re.I)
-    for item in soup.find_all(["li", "tr"]):
+    for item in soup.find_all(True):
         raw = " ".join(item.stripped_strings)
-        date_match, level_match = date_re.search(raw), level_re.search(raw)
-        if not date_match or not level_match: continue
+        date_matches, level_matches = date_re.findall(raw), level_re.findall(raw)
+        # Ancestor wrappers can contain multiple deaths; only accept one-event fragments.
+        if len(date_matches) != 1 or len(level_matches) != 1: continue
         links = [a.get_text(" ", strip=True) for a in item.find_all("a") if a.get_text(" ", strip=True)]
         if not links: continue
         victim = links[0].strip()
@@ -54,9 +55,9 @@ def parse_deaths(html: str):
         key = hashlib.sha256(raw.casefold().encode("utf-8")).hexdigest()
         if key in seen: continue
         seen.add(key)
-        results.append({"source_key": key, "victim": victim, "level": int(level_match.group(1)),
+        results.append({"source_key": key, "victim": victim, "level": int(level_matches[0]),
                         "killer": ", ".join(links[1:]) or None,
-                        "happened_at": parse_time(date_match.group(1)),
+                        "happened_at": parse_time(date_matches[0]),
                         "guild": classify_guild(victim), "raw_text": raw[:2000]})
     return results
 
